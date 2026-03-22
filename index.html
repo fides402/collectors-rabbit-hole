@@ -1022,54 +1022,70 @@ function likeNode(node) {
 async function openRecs(node) {
   const modal = document.getElementById('recs-modal');
   const content = document.getElementById('recs-content');
-  const sub = document.getElementById('recs-album-name');
-  const data = node.fullData;
-
-  sub.textContent = clean(node.name);
+  document.getElementById('recs-album-name').textContent = clean(node.name);
   content.innerHTML = `<div class="recs-loading"><div class="recs-spinner"></div>Asking the crate oracle…</div>`;
   modal.classList.add('open');
 
+  // Ensure we have full release data before building the prompt
+  if (!node.fullData && node.type === 'album') {
+    try {
+      if (node.rtype === 'master') { const m = await dmaster(node.discogsId); node.fullData = await drelease(m.main_release); }
+      else node.fullData = await drelease(node.discogsId);
+    } catch(e) { console.warn('Could not fetch fullData for recs', e); }
+  }
+
   try {
-    const recs = await getRecommendations(node, data);
+    const recs = await getRecommendations(node, node.fullData);
     renderRecs(recs, content);
   } catch(e) {
+    console.error('Recs error:', e);
     content.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:20px">Could not load recommendations</div>`;
   }
 }
 
 async function getRecommendations(node, data) {
   const artists = (data?.artists||[]).map(a=>clean(a.name)).join(', ') || node.name;
-  const genres = [...(data?.genres||[]),...(data?.styles||[])].slice(0,3).join(', ') || 'music';
-  const year = data?.year || '';
+  const genres = [...(data?.genres||[]),...(data?.styles||[])].slice(0,4).join(', ') || 'music';
+  const year = data?.year || node.year || '';
   const title = data?.title || node.name;
+  const label = data?.labels?.[0]?.name || '';
+  const credits = filterCredits(data?.extraartists||[]).slice(0,4).map(c=>`${clean(c.name)} (${c.role})`).join(', ');
 
-  const prompt = `You are an expert record collector and music critic.
+  const prompt = `You are an expert record collector. A user loved "${title}" by ${artists}${year?' ('+year+')':''}.${label?' Label: '+label+'.':''} Genres: ${genres}.${credits?' Key credits: '+credits+'.':''}
 
-A user loved: "${title}" by ${artists} (${year}), genres: ${genres}.
+List exactly 5 album recommendations with strong musical similarities. Short, specific reason for each (same era, shared musicians, similar production style, related scene, etc.).
 
-Recommend exactly 5 albums they would love. For each provide a very specific reason based on shared musical DNA: same session musicians, producers, recording techniques, sonic atmosphere, chord language, rhythmic feel, cultural moment. Be precise and passionate.
+Reply with ONLY a raw JSON array, no markdown, no explanation:
+[{"title":"Album Name","artist":"Artist Name","year":"1975","reason":"One specific sentence why it is similar."},...]`;
 
-Respond ONLY with a JSON array:
-[{"title":"...","artist":"...","year":"...","reason":"..."}]`;
+  const txt = await groq(prompt, 1200);
+  if (!txt) return [];
 
-  const txt = await groq(prompt, 700);
   let recs = [];
   try {
-    const match = (txt||'').match(/\[[\s\S]*\]/);
+    // Strip any markdown code fences or leading text
+    const clean_txt = txt.replace(/```json|```/gi, '').trim();
+    const match = clean_txt.match(/\[[\s\S]*?\]/);
     if (match) recs = JSON.parse(match[0]);
-  } catch {}
+  } catch(e) {
+    console.warn('JSON parse failed, raw txt:', txt);
+    // Fallback: try to parse the whole thing
+    try { recs = JSON.parse(txt.trim()); } catch {}
+  }
 
   if (!recs.length) return [];
 
-  // Fetch Discogs thumbnails in parallel (best effort)
-  const enriched = await Promise.all(recs.map(async rec => {
+  // Fetch Discogs thumbnails sequentially (to respect rate limit)
+  const enriched = [];
+  for (const rec of recs) {
     try {
       const q = `${rec.title} ${rec.artist}`;
       const sr = await dsearch(q);
       const hit = (sr.results||[]).find(r => r.type === 'release' || r.type === 'master');
-      return { ...rec, thumb: hit?.thumb || '', discogsId: hit?.id, discogsType: hit?.type, ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title+' '+rec.artist+' full album')}` };
-    } catch { return rec; }
-  }));
+      enriched.push({ ...rec, thumb: hit?.thumb || '', discogsId: hit?.id, discogsType: hit?.type,
+        ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title+' '+rec.artist)}` });
+    } catch { enriched.push(rec); }
+  }
   return enriched;
 }
 
