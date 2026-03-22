@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Collector's Rabbit Hole</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,900;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+:root {
+  --bg: #0a0a0a;
+  --surface: #161616;
+  --surface2: #1f1f1f;
+  --surface3: #282828;
+  --accent: #ff6b1a;
+  --accent-dim: #c45010;
+  --accent-soft: rgba(255,107,26,0.12);
+  --text: #f0f0f0;
+  --text-muted: #777;
+  --border: #272727;
+  --border-light: #333;
+  --white: #ffffff;
+  --panel-w: 380px;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; }
+
+/* ── WELCOME ── */
+#welcome {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg);
+  transition: opacity .5s, visibility .5s;
+}
+#welcome.gone { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.w-logo { font-size: 46px; font-weight: 900; color: var(--accent); letter-spacing: -2px; text-align: center; line-height: 1; }
+.w-logo span { color: var(--text); }
+.w-tag { font-size: 15px; color: var(--text-muted); margin: 14px 0 36px; text-align: center; max-width: 380px; line-height: 1.6; padding: 0 20px; }
+
+.w-search-wrap { position: relative; width: 100%; max-width: 520px; padding: 0 20px; }
+.w-search-wrap input {
+  width: 100%; background: var(--surface); border: 2px solid var(--border-light);
+  border-radius: 100px; padding: 15px 64px 15px 22px; color: var(--text);
+  font-size: 15px; font-family: 'Inter',sans-serif; outline: none; transition: border-color .2s;
+}
+.w-search-wrap input:focus { border-color: var(--accent); }
+.w-search-wrap input::placeholder { color: var(--text-muted); }
+.w-search-wrap button {
+  position: absolute; right: 26px; top: 50%; transform: translateY(-50%);
+  background: var(--accent); border: none; border-radius: 100px;
+  padding: 9px 20px; color: #fff; font-size: 13px; font-weight: 700;
+  font-family: 'Inter',sans-serif; cursor: pointer; transition: background .2s;
+}
+.w-search-wrap button:hover { background: var(--accent-dim); }
+
+.w-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 18px; max-width: 520px; padding: 0 20px; }
+.chip {
+  background: var(--surface); border: 1px solid var(--border-light);
+  border-radius: 100px; padding: 6px 14px; font-size: 12px;
+  color: var(--text-muted); cursor: pointer; transition: all .2s;
+}
+.chip:hover { border-color: var(--accent); color: var(--text); }
+
+.w-dot-bg {
+  position: absolute; inset: 0; z-index: -1; overflow: hidden;
+  background-image: radial-gradient(circle at 1px 1px, #222 1px, transparent 0);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black 0%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black 0%, transparent 80%);
+}
+
+/* ── HEADER ── */
+#header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 56px; display: flex; align-items: center; gap: 14px; padding: 0 18px;
+  background: linear-gradient(to bottom, rgba(10,10,10,.97) 0%, rgba(10,10,10,0) 100%);
+  backdrop-filter: blur(8px);
+}
+.h-logo { font-size: 16px; font-weight: 900; color: var(--accent); letter-spacing: -0.5px; white-space: nowrap; cursor: pointer; flex-shrink: 0; }
+.h-logo span { color: var(--text); }
+
+#search-wrap { flex: 1; max-width: 480px; position: relative; }
+#search-wrap input {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 100px; padding: 9px 42px 9px 16px; color: var(--text);
+  font-size: 13px; font-family: 'Inter',sans-serif; outline: none; transition: border-color .2s;
+}
+#search-wrap input:focus { border-color: var(--accent); }
+#search-wrap input::placeholder { color: var(--text-muted); }
+#search-btn {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  background: var(--accent); border: none; border-radius: 100px;
+  padding: 5px 12px; color: #fff; font-size: 11px; font-weight: 700;
+  font-family: 'Inter',sans-serif; cursor: pointer; transition: background .2s;
+}
+#search-btn:hover { background: var(--accent-dim); }
+
+.depth-badge { font-size: 12px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.depth-badge strong { color: var(--accent); }
+
+/* ── DROPDOWN ── */
+.srdd {
+  position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+  background: var(--surface); border: 1px solid var(--border-light);
+  border-radius: 16px; overflow: hidden; z-index: 300;
+  max-height: 380px; overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0,0,0,.85);
+  display: none;
+}
+.sr-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+  cursor: pointer; border-bottom: 1px solid var(--border); transition: background .12s;
+}
+.sr-item:last-child { border-bottom: none; }
+.sr-item:hover { background: var(--surface2); }
+.sr-thumb { width: 42px; height: 42px; border-radius: 6px; object-fit: cover; background: var(--surface3); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; color: #444; overflow: hidden; }
+.sr-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.sr-info { flex: 1; min-width: 0; }
+.sr-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.sr-type { font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 2px 8px; border-radius: 100px; flex-shrink: 0; text-transform: uppercase; }
+
+/* ── GRAPH ── */
+#graph { position: fixed; inset: 0; z-index: 1; }
+#graph svg { width: 100%; height: 100%; }
+.link { stroke-linecap: round; }
+.link-lbl { fill: #444; font-size: 9px; font-family: 'Inter',sans-serif; pointer-events: none; text-anchor: middle; }
+.node-lbl { fill: #ddd; font-size: 10px; font-family: 'Inter',sans-serif; pointer-events: none; text-anchor: middle; }
+.node-role-lbl { fill: #555; font-size: 9px; font-family: 'Inter',sans-serif; pointer-events: none; text-anchor: middle; }
+.node-g { cursor: pointer; }
+
+/* Like button on node */
+.node-heart { font-size: 11px; cursor: pointer; }
+
+/* ── PANEL ── */
+#panel {
+  position: fixed; top: 0; right: calc(var(--panel-w) * -1 - 2px); width: var(--panel-w);
+  height: 100vh; background: var(--surface); border-left: 1px solid var(--border);
+  z-index: 150; overflow-y: auto; transition: right .32s cubic-bezier(.4,0,.2,1);
+}
+#panel.open { right: 0; }
+#panel-close {
+  position: absolute; top: 12px; right: 12px; z-index: 10;
+  width: 30px; height: 30px; background: var(--surface2); border: 1px solid var(--border-light);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-muted); font-size: 14px; transition: color .2s, border-color .2s;
+}
+#panel-close:hover { color: var(--text); border-color: #555; }
+.p-cover { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--surface2); display: block; }
+.p-cover-ph { width: 100%; aspect-ratio: 1; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 64px; }
+.p-artist-cover { width: 100%; height: 180px; object-fit: cover; object-position: top; background: var(--surface2); display: block; }
+.p-body { padding: 18px; }
+.p-badge { display: inline-block; font-size: 10px; font-weight: 700; color: var(--accent); background: var(--accent-soft); padding: 3px 10px; border-radius: 100px; margin-bottom: 9px; text-transform: uppercase; letter-spacing: .5px; }
+.p-title { font-size: 21px; font-weight: 700; line-height: 1.2; margin-bottom: 8px; }
+.p-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.p-meta-chip { font-size: 12px; color: var(--text-muted); background: var(--surface2); padding: 3px 10px; border-radius: 100px; }
+.p-meta-chip.accent { color: var(--accent); background: var(--accent-soft); }
+.p-like-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: transparent; border: 1.5px solid var(--border-light); border-radius: 100px;
+  padding: 10px; color: var(--text-muted); font-size: 13px; font-weight: 600;
+  font-family: 'Inter',sans-serif; cursor: pointer; transition: all .2s; margin-bottom: 14px;
+}
+.p-like-btn:hover, .p-like-btn.liked { border-color: #e74c6a; color: #e74c6a; background: rgba(231,76,106,.08); }
+.p-like-btn.liked { background: rgba(231,76,106,.14); }
+
+/* AI block */
+.p-ai {
+  background: var(--accent-soft); border: 1px solid rgba(255,107,26,.2);
+  border-radius: 12px; padding: 14px; margin-bottom: 16px;
+}
+.p-ai-lbl { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; display: flex; align-items: center; gap: 5px; }
+.p-ai-text { font-size: 13px; line-height: 1.65; color: var(--text); }
+.ai-dots { display: flex; gap: 4px; align-items: center; height: 20px; }
+.ai-dot { width: 4px; height: 4px; background: var(--accent); border-radius: 50%; animation: aibounce 1.2s infinite; }
+.ai-dot:nth-child(2) { animation-delay: .2s; }
+.ai-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes aibounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+.p-sec { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin: 16px 0 8px; }
+.disc-link {
+  display: flex; align-items: center; gap: 8px; padding: 11px 14px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text); text-decoration: none; font-size: 13px; font-weight: 500;
+  transition: border-color .2s, background .2s; margin-bottom: 10px;
+}
+.disc-link:hover { border-color: var(--accent); background: var(--accent-soft); }
+.genre-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.g-tag { font-size: 11px; padding: 3px 10px; border-radius: 100px; background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
+
+.video-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.v-item { display: flex; gap: 10px; align-items: center; padding: 7px; border-radius: 9px; cursor: pointer; transition: background .12s; }
+.v-item:hover { background: var(--surface2); }
+.v-thumb { width: 78px; height: 44px; border-radius: 6px; object-fit: cover; background: var(--surface3); flex-shrink: 0; position: relative; overflow: hidden; }
+.v-thumb::after { content: '▶'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; color: #fff; background: rgba(0,0,0,.35); }
+.v-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.v-title { font-size: 12px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.credits-list { margin-bottom: 12px; }
+.credit-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.credit-row:last-child { border-bottom: none; }
+.credit-name { font-size: 13px; cursor: pointer; transition: color .15s; }
+.credit-name:hover { color: var(--accent); }
+.credit-role { font-size: 11px; color: var(--text-muted); text-align: right; max-width: 140px; }
+
+/* ── RECOMMENDATIONS MODAL ── */
+#recs-modal {
+  position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.88); backdrop-filter: blur(8px);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+#recs-modal.open { opacity: 1; pointer-events: all; }
+.recs-box {
+  width: 92vw; max-width: 600px; max-height: 88vh; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border-light); border-radius: 20px;
+  padding: 24px; box-shadow: 0 30px 80px rgba(0,0,0,.9);
+  transform: translateY(20px); transition: transform .3s;
+}
+#recs-modal.open .recs-box { transform: translateY(0); }
+.recs-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+.recs-title { font-size: 18px; font-weight: 700; }
+.recs-close { width: 28px; height: 28px; background: var(--surface2); border: 1px solid var(--border-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); font-size: 13px; flex-shrink: 0; transition: color .2s; }
+.recs-close:hover { color: var(--text); }
+.recs-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+.recs-sub strong { color: var(--accent); }
+.recs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rec-card {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 14px;
+  overflow: hidden; cursor: pointer; transition: border-color .2s, transform .15s;
+  display: flex; flex-direction: column;
+}
+.rec-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.rec-cover { width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--surface3); display: block; font-size: 32px; display: flex; align-items: center; justify-content: center; }
+.rec-cover img { width: 100%; height: 100%; object-fit: cover; }
+.rec-body { padding: 10px; flex: 1; display: flex; flex-direction: column; }
+.rec-title { font-size: 12px; font-weight: 700; margin-bottom: 2px; line-height: 1.3; }
+.rec-artist { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+.rec-reason { font-size: 11px; color: #aaa; line-height: 1.45; flex: 1; }
+.rec-actions { display: flex; gap: 6px; margin-top: 8px; }
+.rec-btn {
+  flex: 1; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--border-light);
+  background: transparent; color: var(--text-muted); font-size: 10px; font-weight: 600;
+  font-family: 'Inter',sans-serif; cursor: pointer; transition: all .15s; text-align: center;
+}
+.rec-btn:hover { border-color: var(--accent); color: var(--accent); }
+.rec-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.rec-btn.primary:hover { background: var(--accent-dim); }
+.recs-loading { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
+.recs-spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 14px; }
+
+/* ── LOADING ── */
+#loading {
+  position: fixed; inset: 0; z-index: 400; background: rgba(10,10,10,.75);
+  backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+#loading.on { opacity: 1; pointer-events: all; }
+.ld-box { text-align: center; }
+.ld-spin { width: 44px; height: 44px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .75s linear infinite; margin: 0 auto 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ld-txt { font-size: 14px; color: var(--text-muted); }
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; z-index: 600;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--surface2); border: 1px solid var(--border-light);
+  border-radius: 100px; padding: 9px 18px; font-size: 13px;
+  opacity: 0; transition: all .28s; white-space: nowrap; pointer-events: none;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── TOOLTIP ── */
+#tip {
+  position: fixed; z-index: 350; background: var(--surface2); border: 1px solid var(--border-light);
+  border-radius: 9px; padding: 8px 12px; font-size: 12px; pointer-events: none;
+  opacity: 0; transition: opacity .15s; max-width: 200px;
+}
+#tip.show { opacity: 1; }
+#tip .tip-role { font-size: 10px; color: var(--accent); }
+
+/* ── LEGEND ── */
+#legend {
+  position: fixed; bottom: 18px; left: 18px; z-index: 80;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 14px; font-size: 10px; display: flex; flex-direction: column; gap: 5px;
+}
+.leg-item { display: flex; align-items: center; gap: 7px; color: var(--text-muted); }
+.leg-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── MOBILE ── */
+@media (max-width: 700px) {
+  :root { --panel-w: 100vw; }
+  #panel { top: auto; right: 0; bottom: calc(-100% - 2px); width: 100%; height: 88vh; border-left: none; border-top: 1px solid var(--border); border-radius: 18px 18px 0 0; transition: bottom .32s cubic-bezier(.4,0,.2,1); }
+  #panel.open { bottom: 0; right: 0; }
+  .w-logo { font-size: 30px; }
+  .w-tag { font-size: 13px; }
+  .h-logo { display: none; }
+  .depth-badge { display: none; }
+  #legend { display: none; }
+  .recs-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- Welcome -->
+<div id="welcome">
+  <div class="w-dot-bg"></div>
+  <div class="w-logo">collector's<br><span>rabbit hole</span></div>
+  <p class="w-tag">Drop an album, song, or artist — follow every musician, producer, arranger, and label across infinite records.</p>
+  <div class="w-search-wrap">
+    <input id="w-input" type="text" placeholder="Kind of Blue, John Coltrane, Blue Note…" autocomplete="off">
+    <button onclick="triggerSearch('w-input')">Explore →</button>
+    <div class="srdd" id="w-dd"></div>
+  </div>
+  <div class="w-chips">
+    <div class="chip" onclick="quickSearch('Kind of Blue Miles Davis')">Kind of Blue</div>
+    <div class="chip" onclick="quickSearch('Madvillainy MF DOOM Madlib')">Madvillainy</div>
+    <div class="chip" onclick="quickSearch('Innervisions Stevie Wonder')">Innervisions</div>
+    <div class="chip" onclick="quickSearch('Blue Note Records label')">Blue Note</div>
+    <div class="chip" onclick="quickSearch('Enter The Wu-Tang 36 Chambers')">Wu-Tang</div>
+    <div class="chip" onclick="quickSearch('Portishead Dummy')">Dummy</div>
+  </div>
+</div>
+
+<!-- Header -->
+<div id="header">
+  <div class="h-logo" onclick="resetAll()">collector's <span>rabbit hole</span></div>
+  <div id="search-wrap">
+    <input id="h-input" type="text" placeholder="Search albums, artists, labels…" autocomplete="off">
+    <button id="search-btn" onclick="triggerSearch('h-input')">Search</button>
+    <div class="srdd" id="h-dd"></div>
+  </div>
+  <div class="depth-badge">depth <strong id="depth-num">0</strong></div>
+</div>
+
+<!-- Graph -->
+<div id="graph"></div>
+
+<!-- Info Panel -->
+<div id="panel">
+  <button id="panel-close" onclick="closePanel()">✕</button>
+  <div id="panel-body"></div>
+</div>
+
+<!-- Recommendations Modal -->
+<div id="recs-modal">
+  <div class="recs-box">
+    <div class="recs-header">
+      <div class="recs-title">❤ You might love these</div>
+      <div class="recs-close" onclick="closeRecs()">✕</div>
+    </div>
+    <div class="recs-sub" id="recs-sub">Based on <strong id="recs-album-name">–</strong></div>
+    <div id="recs-content"></div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loading"><div class="ld-box"><div class="ld-spin"></div><div class="ld-txt" id="ld-txt">Digging through the crates…</div></div></div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:#ff6b1a"></div>Album / Release</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#f0f0f0"></div>Artist / Performer</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#ffb347"></div>Producer</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#b8a9c9"></div>Composer / Writer</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#87ceeb"></div>Arranger</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#7eb8a4"></div>Engineer / Mixer</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#888"></div>Label</div>
+</div>
+
+<!-- Tooltip -->
+<div id="tip"></div>
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+const CFG = {
+  GROQ_MODEL: 'llama3-8b-8192',
+  MAX_ARTIST_RELEASES: 8,
+  MUSIC_ROLES: ['produc','arrang','compos','written','conductor','mixed','engineer','mastered','bass','guitar','piano','drums','percussion','saxophone','trumpet','violin','cello','flute','organ','synth','keyboard','vocals','voice','strings','horns','brass','woodwind','vibraphone','trombone','harmonica','mandolin','harp','clarinet','accordion','turntabl','dj ','featuring','programming','sampler','mellophone'],
+  COLORS: { album:'#ff6b1a', artist:'#f0f0f0', label:'#888', producer:'#ffb347', composer:'#b8a9c9', arranger:'#87ceeb', engineer:'#7eb8a4', def:'#aaa' }
+};
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+const S = {
+  nodes: [], links: [],
+  expanded: new Set(),
+  liked: new Set(),
+  depth: 0,
+  sim: null, svg: null, g: null, zoomB: null,
+  groqCache: new Map(),
+  apiQ: [], apiRunning: false,
+  searchResultsCache: new Map()
+};
+
+// ═══════════════════════════════════════════════════════════
+// API QUEUE  (≤3 req/s for Discogs)
+// ═══════════════════════════════════════════════════════════
+function enqueue(fn) {
+  return new Promise((res, rej) => {
+    S.apiQ.push({ fn, res, rej });
+    if (!S.apiRunning) drainQ();
+  });
+}
+async function drainQ() {
+  if (!S.apiQ.length) { S.apiRunning = false; return; }
+  S.apiRunning = true;
+  const { fn, res, rej } = S.apiQ.shift();
+  try { res(await fn()); } catch(e) { rej(e); }
+  setTimeout(drainQ, 340);
+}
+async function dget(path) {
+  return enqueue(async () => {
+    const url = `/api/discogs?path=${encodeURIComponent(path)}`;
+    const r = await fetch(url);
+    if (r.status === 429) { await sleep(2500); return dget(path); }
+    if (!r.ok) throw new Error(`Discogs ${r.status}`);
+    return r.json();
+  });
+}
+const dsearch = q => dget(`/database/search?q=${encodeURIComponent(q)}&per_page=10`);
+const drelease = id => dget(`/releases/${id}`);
+const dmaster = id => dget(`/masters/${id}`);
+const dartist = id => dget(`/artists/${id}`);
+const dartistRels = id => dget(`/artists/${id}/releases?per_page=${CFG.MAX_ARTIST_RELEASES}&sort=year&sort_order=desc`);
+const dlabel = id => dget(`/labels/${id}`);
+const dlabelRels = id => dget(`/labels/${id}/releases?per_page=12&sort=year&sort_order=desc`);
+
+async function groq(prompt, maxTok = 130) {
+  if (S.groqCache.has(prompt)) return S.groqCache.get(prompt);
+  try {
+    const r = await fetch('/api/groq', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: CFG.GROQ_MODEL, messages: [{ role: 'user', content: prompt }], max_tokens: maxTok, temperature: 0.75 })
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const txt = d.choices[0].message.content;
+    S.groqCache.set(prompt, txt);
+    return txt;
+  } catch { return null; }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ═══════════════════════════════════════════════════════════
+// GRAPH HELPERS
+// ═══════════════════════════════════════════════════════════
+function nodeR(d) { return d.isRoot ? 44 : d.type === 'album' ? 30 : d.type === 'label' ? 20 : 26; }
+
+function nodeColor(d) {
+  if (d.type === 'label') return CFG.COLORS.label;
+  if (d.type === 'album') return CFG.COLORS.album;
+  const r = (d.role || '').toLowerCase();
+  if (r.includes('produc')) return CFG.COLORS.producer;
+  if (r.includes('arrang') || r.includes('conductor')) return CFG.COLORS.arranger;
+  if (r.includes('compos') || r.includes('written') || r.includes('lyric')) return CFG.COLORS.composer;
+  if (r.includes('engineer') || r.includes('mixed') || r.includes('mastered')) return CFG.COLORS.engineer;
+  return CFG.COLORS.artist;
+}
+
+function linkColor(role) {
+  const r = (role || '').toLowerCase();
+  if (r.includes('produc')) return CFG.COLORS.producer;
+  if (r.includes('arrang') || r.includes('conductor')) return CFG.COLORS.arranger;
+  if (r.includes('compos') || r.includes('written')) return CFG.COLORS.composer;
+  return '#383838';
+}
+
+function nodeExists(id) { return S.nodes.some(n => n.id === id); }
+function linkExists(a, b) {
+  return S.links.some(l => {
+    const s = l.source?.id || l.source, t = l.target?.id || l.target;
+    return (s === a && t === b) || (s === b && t === a);
+  });
+}
+function addNode(n) { if (!nodeExists(n.id)) S.nodes.push(n); }
+function addLink(l) { if (!linkExists(l.source, l.target)) S.links.push(l); }
+
+function filterCredits(ea) {
+  if (!ea) return [];
+  return ea.filter(x => {
+    const r = (x.role || '').toLowerCase();
+    return CFG.MUSIC_ROLES.some(k => r.includes(k));
+  });
+}
+
+function initials(name) {
+  if (!name) return '?';
+  const w = name.split(' ').filter(Boolean);
+  return w.length === 1 ? w[0].slice(0, 2).toUpperCase() : (w[0][0] + w[w.length - 1][0]).toUpperCase();
+}
+function trunc(s, n) { return !s ? '' : s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function clean(s) { return (s || '').replace(/\s*\(\d+\)$/, ''); }
+function esc(s) { return (s || '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function ytId(uri) { const m = (uri||'').match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/); return m?m[1]:null; }
+function cleanBB(s) { return (s||'').replace(/\[.*?\]/g,'').trim(); }
+
+// ═══════════════════════════════════════════════════════════
+// D3 INIT
+// ═══════════════════════════════════════════════════════════
+function initGraph() {
+  const el = document.getElementById('graph');
+  const W = el.clientWidth, H = el.clientHeight;
+
+  S.zoomB = d3.zoom().scaleExtent([.08, 4]).on('zoom', e => S.g.attr('transform', e.transform));
+  S.svg = d3.select('#graph').append('svg')
+    .call(S.zoomB)
+    .on('click', function(ev) { if (ev.target === this || ev.target.closest('svg') === ev.target) closePanel(); });
+
+  const defs = S.svg.append('defs');
+  // Glow
+  const flt = defs.append('filter').attr('id','glow').attr('x','-60%').attr('y','-60%').attr('width','220%').attr('height','220%');
+  flt.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation','5').attr('result','b');
+  const fm = flt.append('feMerge'); fm.append('feMergeNode').attr('in','b'); fm.append('feMergeNode').attr('in','SourceGraphic');
+  // Strong glow
+  const flt2 = defs.append('filter').attr('id','glow2').attr('x','-100%').attr('y','-100%').attr('width','300%').attr('height','300%');
+  flt2.append('feGaussianBlur').attr('in','SourceGraphic').attr('stdDeviation','10').attr('result','b2');
+  const fm2 = flt2.append('feMerge'); fm2.append('feMergeNode').attr('in','b2'); fm2.append('feMergeNode').attr('in','SourceGraphic');
+
+  S.g = S.svg.append('g');
+  S.g.append('g').attr('class','g-links');
+  S.g.append('g').attr('class','g-llbls');
+  S.g.append('g').attr('class','g-nodes');
+
+  S.sim = d3.forceSimulation()
+    .force('link', d3.forceLink().id(d => d.id).distance(d => {
+      const st = d.source.type || '', tt = d.target.type || '';
+      return (st === 'album' || tt === 'album') ? 145 : 115;
+    }).strength(.55))
+    .force('charge', d3.forceManyBody().strength(d => d.isRoot ? -700 : -280))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collide', d3.forceCollide().radius(d => nodeR(d) + 22))
+    .alphaDecay(.022)
+    .on('tick', tick);
+
+  window.addEventListener('resize', () => {
+    S.sim.force('center', d3.forceCenter(el.clientWidth / 2, el.clientHeight / 2));
+  });
+}
+
+function tick() {
+  if (!S.g) return;
+  S.g.select('.g-links').selectAll('line')
+    .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  S.g.select('.g-llbls').selectAll('text')
+    .attr('transform', d => `translate(${(d.source.x + d.target.x) / 2},${(d.source.y + d.target.y) / 2})`);
+  S.g.select('.g-nodes').selectAll('.node-g')
+    .attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════
+function render() {
+  if (!S.sim) initGraph();
+
+  // Links
+  S.g.select('.g-links').selectAll('line')
+    .data(S.links, d => `${d.source?.id||d.source}${d.target?.id||d.target}${d.role}`)
+    .join(
+      e => e.append('line').attr('class','link').style('stroke', d => linkColor(d.role))
+        .style('stroke-opacity', 0).style('stroke-width', 1.5)
+        .call(el => el.transition().duration(600).style('stroke-opacity', .45)),
+      u => u.style('stroke', d => linkColor(d.role)),
+      x => x.transition().duration(250).style('stroke-opacity', 0).remove()
+    );
+
+  // Link labels
+  S.g.select('.g-llbls').selectAll('text')
+    .data(S.links, d => `${d.source?.id||d.source}${d.target?.id||d.target}`)
+    .join(
+      e => e.append('text').attr('class','link-lbl').attr('text-anchor','middle').attr('dy','-3').text(d => trunc(d.role||'',18)),
+      u => u.text(d => trunc(d.role||'',18)),
+      x => x.remove()
+    );
+
+  // Nodes
+  const drag = d3.drag()
+    .on('start', (ev, d) => { if (!ev.active) S.sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; })
+    .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+    .on('end', (ev, d) => { if (!ev.active) S.sim.alphaTarget(0); d.fx = null; d.fy = null; });
+
+  S.g.select('.g-nodes').selectAll('.node-g')
+    .data(S.nodes, d => d.id)
+    .join(
+      enter => {
+        const g = enter.append('g').attr('class','node-g').style('opacity', 0).call(drag);
+        g.transition().duration(500).style('opacity', 1);
+
+        // Outer glow ring for albums
+        g.filter(d => d.type === 'album').append('circle')
+          .attr('r', d => nodeR(d) + 9).style('fill', 'none')
+          .style('stroke', d => nodeColor(d)).style('stroke-width', 1).style('stroke-opacity', .25);
+
+        // Clip path & image or initials
+        g.each(function(d) {
+          const sel = d3.select(this);
+          const r = nodeR(d);
+          const clipId = `cp-${d.id.replace(/[^a-z0-9]/gi,'_')}`;
+          S.svg.select('defs').append('clipPath').attr('id', clipId).append('circle').attr('r', r);
+
+          sel.append('circle').attr('class','node-circle').attr('r', r)
+            .style('fill', d => nodeColor(d)).style('filter', d => d.isRoot ? 'url(#glow2)' : 'url(#glow)');
+
+          if (d.thumb) {
+            sel.append('image').attr('href', d.thumb)
+              .attr('x', -r).attr('y', -r).attr('width', r*2).attr('height', r*2)
+              .attr('clip-path', `url(#${clipId})`).style('opacity', .88);
+          } else {
+            sel.append('text').attr('text-anchor','middle').attr('dy','.35em')
+              .style('fill', d.type === 'album' ? '#1a1a1a' : '#0a0a0a')
+              .style('font-size', `${r * .55}px`).style('font-weight','700')
+              .style('font-family','Inter,sans-serif').style('pointer-events','none')
+              .text(d => initials(d.name));
+          }
+        });
+
+        // Like indicator dot (hidden by default)
+        g.filter(d => d.type === 'album').append('circle')
+          .attr('class','like-dot').attr('r', 5)
+          .attr('cx', d => nodeR(d) - 2).attr('cy', d => -(nodeR(d) - 2))
+          .style('fill','#e74c6a').style('stroke','#0a0a0a').style('stroke-width',1.5)
+          .style('opacity', 0).style('pointer-events','none');
+
+        // Expand dashed ring
+        g.append('circle').attr('class','exp-ring').attr('r', d => nodeR(d) + 15)
+          .style('fill','none').style('stroke', CFG.COLORS.album).style('stroke-width',1.5)
+          .style('stroke-dasharray','4,4').style('opacity', d => S.expanded.has(d.id) ? 0 : .35);
+
+        // Name label
+        g.append('text').attr('class','node-lbl').attr('y', d => nodeR(d) + 13).text(d => trunc(clean(d.name), 19));
+        // Role label
+        g.filter(d => d.role).append('text').attr('class','node-role-lbl').attr('y', d => nodeR(d) + 24).text(d => trunc(d.role||'',17));
+
+        // Like heart (only on album nodes, shows on hover via CSS)
+        g.filter(d => d.type === 'album').append('text').attr('class','node-heart')
+          .attr('y', d => -(nodeR(d) + 6)).attr('text-anchor','middle')
+          .style('fill','#e74c6a').style('opacity', 0).style('pointer-events','all')
+          .text('♥')
+          .on('click', (ev, d) => { ev.stopPropagation(); likeNode(d); });
+
+        // Events
+        g.on('click', (ev, d) => { ev.stopPropagation(); if (!S.expanded.has(d.id)) expandNode(d); showPanel(d); })
+         .on('mouseover', (ev, d) => hoverOn(ev, d))
+         .on('mouseout', (ev, d) => hoverOff());
+        return g;
+      },
+      update => {
+        update.select('.exp-ring').style('opacity', d => S.expanded.has(d.id) ? 0 : .35);
+        update.select('.like-dot').style('opacity', d => S.liked.has(d.id) ? 1 : 0);
+        update.select('.node-circle').style('stroke', d => S.liked.has(d.id) ? '#e74c6a' : 'none').style('stroke-width', 2);
+        return update;
+      },
+      exit => exit.transition().duration(250).style('opacity', 0).remove()
+    );
+
+  S.sim.nodes(S.nodes);
+  S.sim.force('link').links(S.links);
+  S.sim.alpha(.3).restart();
+}
+
+// ═══════════════════════════════════════════════════════════
+// HOVER
+// ═══════════════════════════════════════════════════════════
+function hoverOn(ev, d) {
+  // Dim unconnected
+  const conn = new Set([d.id]);
+  S.links.forEach(l => {
+    const s = l.source?.id || l.source, t = l.target?.id || l.target;
+    if (s === d.id) conn.add(t);
+    if (t === d.id) conn.add(s);
+  });
+  S.g.select('.g-nodes').selectAll('.node-g').style('opacity', n => conn.has(n.id) ? 1 : .2);
+  S.g.select('.g-links').selectAll('line').style('stroke-opacity', l => {
+    const s = l.source?.id||l.source, t = l.target?.id||l.target;
+    return s === d.id || t === d.id ? .9 : .05;
+  });
+  // Show heart
+  d3.select(ev.currentTarget).select('.node-heart')
+    .style('opacity', d.type === 'album' ? (S.liked.has(d.id) ? 1 : .7) : 0);
+  // Tooltip
+  const tip = document.getElementById('tip');
+  tip.innerHTML = `<strong>${esc(clean(d.name))}</strong>${d.role?`<br><span class="tip-role">${esc(d.role)}</span>`:''}${d.year?`<br><span style="color:#555;font-size:10px">${d.year}</span>`:''}${!S.expanded.has(d.id)?`<br><span style="color:#444;font-size:9px">click to expand</span>`:''}`;
+  tip.style.left = (ev.pageX + 14) + 'px';
+  tip.style.top = (ev.pageY - 8) + 'px';
+  tip.classList.add('show');
+}
+function hoverOff() {
+  S.g.select('.g-nodes').selectAll('.node-g').style('opacity', 1);
+  S.g.select('.g-links').selectAll('line').style('stroke-opacity', .45);
+  S.g.select('.g-nodes').selectAll('.node-heart').style('opacity', 0);
+  document.getElementById('tip').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXPAND
+// ═══════════════════════════════════════════════════════════
+async function expandNode(node) {
+  if (S.expanded.has(node.id)) return;
+  S.expanded.add(node.id);
+  showLoad(`Exploring ${trunc(node.name, 25)}…`);
+  try {
+    if (node.type === 'album') await expandAlbum(node);
+    else if (node.type === 'artist') await expandArtist(node);
+    else if (node.type === 'label') await expandLabel(node);
+    S.depth = Math.max(S.depth, (node.depth || 0) + 1);
+    document.getElementById('depth-num').textContent = S.depth;
+    render();
+  } catch(e) {
+    console.error(e);
+    toast('Could not expand — try again');
+    S.expanded.delete(node.id);
+  } finally { hideLoad(); }
+}
+
+async function expandAlbum(node) {
+  let rel;
+  if (node.rtype === 'master') {
+    const m = await dmaster(node.discogsId);
+    rel = await drelease(m.main_release);
+  } else {
+    rel = await drelease(node.discogsId);
+  }
+  node.fullData = rel;
+  // Label
+  if (rel.labels?.length) {
+    const lbl = rel.labels[0];
+    const lid = `label-${lbl.id}`;
+    addNode({ id: lid, discogsId: lbl.id, type: 'label', name: lbl.name, depth: (node.depth||0)+1 });
+    addLink({ source: node.id, target: lid, role: 'released on' });
+  }
+  // Artists + credits
+  const all = [
+    ...(rel.artists||[]).map(a => ({ ...a, role: 'Artist' })),
+    ...filterCredits(rel.extraartists||[])
+  ];
+  const seen = new Set();
+  for (const a of all) {
+    if (!a.id || seen.has(a.id)) continue;
+    seen.add(a.id);
+    const aid = `artist-${a.id}`;
+    const aname = clean(a.name);
+    if (!nodeExists(aid)) addNode({ id: aid, discogsId: a.id, type: 'artist', name: aname, role: a.role||'Artist', depth: (node.depth||0)+1 });
+    addLink({ source: aid, target: node.id, role: a.role||'Artist' });
+  }
+}
+
+async function expandArtist(node) {
+  const data = await dartistRels(node.discogsId);
+  for (const r of (data.releases||[]).slice(0, CFG.MAX_ARTIST_RELEASES)) {
+    const rid = `album-${r.id}`;
+    if (!nodeExists(rid)) addNode({ id: rid, discogsId: r.id, type: 'album', rtype: r.type, name: r.title, year: r.year, thumb: r.thumb, depth: (node.depth||0)+1 });
+    addLink({ source: node.id, target: rid, role: (r.role||'Performer').toLowerCase() });
+  }
+}
+
+async function expandLabel(node) {
+  const data = await dlabelRels(node.discogsId);
+  for (const r of (data.releases||[]).slice(0, 12)) {
+    const rid = `album-${r.id}`;
+    if (!nodeExists(rid)) addNode({ id: rid, discogsId: r.id, type: 'album', name: r.title, year: r.year, thumb: r.thumb, depth: (node.depth||0)+1 });
+    addLink({ source: node.id, target: rid, role: 'released' });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PANEL
+// ═══════════════════════════════════════════════════════════
+async function showPanel(node) {
+  const panel = document.getElementById('panel');
+  const body = document.getElementById('panel-body');
+  panel.classList.add('open');
+  body.innerHTML = skeletonHTML();
+
+  if (!node.fullData) {
+    try {
+      if (node.type === 'album') {
+        if (node.rtype === 'master') { const m = await dmaster(node.discogsId); node.fullData = await drelease(m.main_release); }
+        else node.fullData = await drelease(node.discogsId);
+      } else if (node.type === 'artist') node.fullData = await dartist(node.discogsId);
+      else if (node.type === 'label') node.fullData = await dlabel(node.discogsId);
+    } catch(e) { console.error(e); }
+  }
+
+  if (node.type === 'album') body.innerHTML = albumPanelHTML(node, node.fullData);
+  else if (node.type === 'artist') body.innerHTML = artistPanelHTML(node, node.fullData);
+  else body.innerHTML = labelPanelHTML(node, node.fullData);
+
+  // AI commentary async
+  loadAI(node, node.fullData);
+}
+
+function skeletonHTML() {
+  return `<div style="background:var(--surface2);height:220px;display:flex;align-items:center;justify-content:center;color:#333;font-size:13px">Loading…</div><div style="padding:18px"><div style="background:var(--surface2);height:22px;border-radius:4px;margin-bottom:10px;width:55%"></div><div style="background:var(--surface2);height:14px;border-radius:4px;width:80%;margin-bottom:6px"></div></div>`;
+}
+
+function albumPanelHTML(node, d) {
+  if (!d) return `<div style="padding:20px;color:var(--text-muted)">No data</div>`;
+  const cover = d.images?.[0]?.uri || node.thumb || '';
+  const title = d.title || node.name;
+  const artists = (d.artists||[]).map(a=>clean(a.name)).join(', ');
+  const year = d.year || node.year || '';
+  const label = d.labels?.[0]?.name || '';
+  const country = d.country || '';
+  const genres = [...(d.genres||[]),...(d.styles||[])].slice(0,6);
+  const videos = (d.videos||[]).filter(v=>ytId(v.uri));
+  const credits = filterCredits(d.extraartists||[]);
+  const isLiked = S.liked.has(node.id);
+  let h = '';
+  h += cover ? `<img class="p-cover" src="${esc(cover)}" alt="" onerror="this.parentNode.innerHTML='<div class=p-cover-ph>🎵</div>'">` : `<div class="p-cover-ph">🎵</div>`;
+  h += `<div class="p-body">`;
+  h += `<div class="p-badge">Album</div>`;
+  h += `<div class="p-title">${esc(title)}</div>`;
+  h += `<div class="p-meta">`;
+  if (artists) h += `<span class="p-meta-chip">${esc(artists)}</span>`;
+  if (year) h += `<span class="p-meta-chip accent">${year}</span>`;
+  if (label) h += `<span class="p-meta-chip">${esc(label)}</span>`;
+  if (country) h += `<span class="p-meta-chip">${esc(country)}</span>`;
+  h += `</div>`;
+  h += `<button class="p-like-btn${isLiked?' liked':''}" id="panel-like-btn" onclick="likeNode(window._panelNode)">
+    <span>${isLiked?'❤':'♡'}</span> <span>${isLiked?'Loved — see similar':'Add to loved & get recommendations'}</span>
+  </button>`;
+  h += `<div class="p-ai" id="p-ai"><div class="p-ai-lbl">◆ AI Crate Notes</div><div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div></div>`;
+  if (genres.length) { h += `<div class="genre-tags">${genres.map(g=>`<span class="g-tag">${esc(g)}</span>`).join('')}</div>`; }
+  h += `<a class="disc-link" href="https://www.discogs.com/release/${d.id}" target="_blank">⬗ View on Discogs</a>`;
+  if (videos.length) {
+    h += `<div class="p-sec">Tracks / Videos</div><div class="video-list">`;
+    videos.slice(0,5).forEach(v => {
+      const vid = ytId(v.uri);
+      h += `<div class="v-item" onclick="window.open('https://www.youtube.com/watch?v=${vid}','_blank')"><div class="v-thumb"><img src="https://img.youtube.com/vi/${vid}/mqdefault.jpg" alt=""></div><div class="v-title">${esc(v.title||'Track')}</div></div>`;
+    });
+    h += `</div>`;
+  }
+  if (credits.length) {
+    h += `<div class="p-sec">Credits</div><div class="credits-list">`;
+    credits.forEach(c => {
+      h += `<div class="credit-row"><span class="credit-name" onclick="jumpTo('artist-${c.id}')">${esc(clean(c.name))}</span><span class="credit-role">${esc(c.role)}</span></div>`;
+    });
+    h += `</div>`;
+  }
+  h += `</div>`;
+  window._panelNode = node;
+  return h;
+}
+
+function artistPanelHTML(node, d) {
+  const photo = d?.images?.[0]?.uri || '';
+  const name = clean(d?.name || node.name);
+  const profile = d?.profile || '';
+  const members = d?.members?.map(m=>m.name)||[];
+  let h = '';
+  h += photo ? `<img class="p-artist-cover" src="${esc(photo)}" alt="" onerror="this.style.display='none'">` : `<div class="p-cover-ph" style="height:140px">👤</div>`;
+  h += `<div class="p-body">`;
+  h += `<div class="p-badge">${esc(node.role||'Artist')}</div>`;
+  h += `<div class="p-title">${esc(name)}</div>`;
+  if (node.role) h += `<div class="p-meta"><span class="p-meta-chip accent">${esc(node.role)}</span></div>`;
+  h += `<div class="p-ai" id="p-ai"><div class="p-ai-lbl">◆ AI Crate Notes</div><div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div></div>`;
+  h += `<a class="disc-link" href="https://www.discogs.com/artist/${node.discogsId}" target="_blank">⬗ View on Discogs</a>`;
+  if (profile) h += `<div class="p-sec">Bio</div><p style="font-size:13px;color:#aaa;line-height:1.65;margin-bottom:14px">${esc(cleanBB(profile)).slice(0,600)}…</p>`;
+  if (members.length) {
+    h += `<div class="p-sec">Members</div><div class="credits-list">`;
+    members.slice(0,8).forEach(m => { h += `<div class="credit-row"><span class="credit-name">${esc(m)}</span></div>`; });
+    h += `</div>`;
+  }
+  h += `</div>`;
+  return h;
+}
+
+function labelPanelHTML(node, d) {
+  const logo = d?.images?.[0]?.uri || '';
+  const name = d?.name || node.name;
+  const profile = d?.profile || '';
+  let h = '';
+  h += logo ? `<img class="p-cover" src="${esc(logo)}" alt="" style="height:160px;object-fit:contain;background:#111">` : `<div class="p-cover-ph" style="height:110px">🏷️</div>`;
+  h += `<div class="p-body">`;
+  h += `<div class="p-badge">Label</div>`;
+  h += `<div class="p-title">${esc(name)}</div>`;
+  h += `<div class="p-ai" id="p-ai"><div class="p-ai-lbl">◆ AI Crate Notes</div><div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div></div>`;
+  h += `<a class="disc-link" href="https://www.discogs.com/label/${node.discogsId}" target="_blank">⬗ View on Discogs</a>`;
+  if (profile) h += `<p style="font-size:13px;color:#aaa;line-height:1.65">${esc(cleanBB(profile)).slice(0,450)}…</p>`;
+  h += `</div>`;
+  return h;
+}
+
+async function loadAI(node, data) {
+  const el = document.getElementById('p-ai');
+  if (!el) return;
+  let ctx = '';
+  if (node.type === 'album') {
+    const ar = (data?.artists||[]).map(a=>clean(a.name)).join(', ');
+    ctx = `${data?.title||node.name} by ${ar} (${data?.year||''})`;
+  } else ctx = `${clean(node.name)}${node.role ? ' — ' + node.role : ''}`;
+
+  const type = node.type === 'album' ? 'album' : 'artist';
+  const prompts = {
+    album: `You are a passionate vinyl crate digger and music critic. In 2-3 engaging sentences, describe "${ctx}". Mention its style, sonic atmosphere, cultural significance, and one surprising fact. Be specific and exciting.`,
+    artist: `You are a passionate vinyl crate digger. In 2-3 sentences, describe the musician "${ctx}". Cover their sonic signature, key collaborations, and why collectors should explore their catalog.`
+  };
+
+  const txt = await groq(prompts[type] || prompts.album);
+  if (el && txt) {
+    el.innerHTML = `<div class="p-ai-lbl">◆ AI Crate Notes</div><div class="p-ai-text">${esc(txt)}</div>`;
+  } else if (el) el.style.display = 'none';
+}
+
+function closePanel() { document.getElementById('panel').classList.remove('open'); }
+
+function jumpTo(nodeId) {
+  const node = S.nodes.find(n => n.id === nodeId);
+  if (!node || node.x == null) return;
+  const el = document.getElementById('graph');
+  const W = el.clientWidth, H = el.clientHeight;
+  S.svg.transition().duration(700).call(S.zoomB.transform, d3.zoomIdentity.translate(W/2, H/2).scale(1.4).translate(-node.x, -node.y));
+  showPanel(node);
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIKE + RECOMMENDATIONS
+// ═══════════════════════════════════════════════════════════
+function likeNode(node) {
+  if (!node || node.type !== 'album') return;
+  S.liked.add(node.id);
+  render();
+  // Update panel button if visible
+  const btn = document.getElementById('panel-like-btn');
+  if (btn) { btn.classList.add('liked'); btn.innerHTML = '<span>❤</span> <span>Loved — see similar</span>'; }
+  openRecs(node);
+}
+
+async function openRecs(node) {
+  const modal = document.getElementById('recs-modal');
+  const content = document.getElementById('recs-content');
+  const sub = document.getElementById('recs-album-name');
+  const data = node.fullData;
+
+  sub.textContent = clean(node.name);
+  content.innerHTML = `<div class="recs-loading"><div class="recs-spinner"></div>Asking the crate oracle…</div>`;
+  modal.classList.add('open');
+
+  try {
+    const recs = await getRecommendations(node, data);
+    renderRecs(recs, content);
+  } catch(e) {
+    content.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:20px">Could not load recommendations</div>`;
+  }
+}
+
+async function getRecommendations(node, data) {
+  const artists = (data?.artists||[]).map(a=>clean(a.name)).join(', ') || node.name;
+  const genres = [...(data?.genres||[]),...(data?.styles||[])].slice(0,3).join(', ') || 'music';
+  const year = data?.year || '';
+  const title = data?.title || node.name;
+
+  const prompt = `You are an expert record collector and music critic.
+
+A user loved: "${title}" by ${artists} (${year}), genres: ${genres}.
+
+Recommend exactly 5 albums they would love. For each provide a very specific reason based on shared musical DNA: same session musicians, producers, recording techniques, sonic atmosphere, chord language, rhythmic feel, cultural moment. Be precise and passionate.
+
+Respond ONLY with a JSON array:
+[{"title":"...","artist":"...","year":"...","reason":"..."}]`;
+
+  const txt = await groq(prompt, 700);
+  let recs = [];
+  try {
+    const match = (txt||'').match(/\[[\s\S]*\]/);
+    if (match) recs = JSON.parse(match[0]);
+  } catch {}
+
+  if (!recs.length) return [];
+
+  // Fetch Discogs thumbnails in parallel (best effort)
+  const enriched = await Promise.all(recs.map(async rec => {
+    try {
+      const q = `${rec.title} ${rec.artist}`;
+      const sr = await dsearch(q);
+      const hit = (sr.results||[]).find(r => r.type === 'release' || r.type === 'master');
+      return { ...rec, thumb: hit?.thumb || '', discogsId: hit?.id, discogsType: hit?.type, ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title+' '+rec.artist+' full album')}` };
+    } catch { return rec; }
+  }));
+  return enriched;
+}
+
+function renderRecs(recs, container) {
+  if (!recs.length) { container.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:20px">No recommendations found</div>`; return; }
+  let h = `<div class="recs-grid">`;
+  recs.forEach(rec => {
+    const hasThumb = rec.thumb && rec.thumb.length > 0;
+    h += `<div class="rec-card" onclick="if(event.target===this||event.target.classList.contains('rec-card')){window.open('${esc(rec.ytSearch||'')}','_blank')}">`;
+    h += `<div class="rec-cover">${hasThumb ? `<img src="${esc(rec.thumb)}" alt="" onerror="this.parentNode.innerHTML='🎵'">` : '🎵'}</div>`;
+    h += `<div class="rec-body">`;
+    h += `<div class="rec-title">${esc(rec.title)}</div>`;
+    h += `<div class="rec-artist">${esc(rec.artist)} · ${esc(rec.year||'')}</div>`;
+    h += `<div class="rec-reason">${esc(rec.reason)}</div>`;
+    h += `<div class="rec-actions">`;
+    h += `<button class="rec-btn" onclick="window.open('https://www.youtube.com/results?search_query=${encodeURIComponent((rec.title||'')+' '+(rec.artist||''))}','_blank')">▶ Listen</button>`;
+    if (rec.discogsId) h += `<button class="rec-btn" onclick="addRecToGraph(${rec.discogsId},'${esc(rec.discogsType||'release')}','${esc(rec.title)}','${esc(rec.thumb||'')}')">＋ Explore</button>`;
+    h += `</div></div></div>`;
+  });
+  h += `</div>`;
+  container.innerHTML = h;
+}
+
+function addRecToGraph(id, type, title, thumb) {
+  closeRecs();
+  const nodeId = `album-${id}`;
+  if (!nodeExists(nodeId)) {
+    addNode({ id: nodeId, discogsId: id, type: 'album', rtype: type, name: title, thumb: thumb, depth: S.depth + 1 });
+    render();
+    toast(`Added "${trunc(title,25)}" to the graph`);
+  } else {
+    toast('Already in the graph');
+  }
+}
+
+function closeRecs() { document.getElementById('recs-modal').classList.remove('open'); }
+
+// ═══════════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════════
+let _searchTimer;
+function initSearch() {
+  ['w-input','h-input'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') triggerSearch(id); });
+    inp.addEventListener('input', () => {
+      clearTimeout(_searchTimer);
+      const q = inp.value.trim();
+      const dd = document.getElementById(id === 'w-input' ? 'w-dd' : 'h-dd');
+      if (q.length > 2) _searchTimer = setTimeout(() => runSearch(q, dd), 380);
+      else dd.style.display = 'none';
+    });
+  });
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.w-search-wrap') && !e.target.closest('#search-wrap')) closeDropdowns();
+  });
+}
+
+async function triggerSearch(inputId) {
+  const inp = document.getElementById(inputId);
+  const q = (inp?.value||'').trim();
+  if (!q) return;
+  const dd = document.getElementById(inputId === 'w-input' ? 'w-dd' : 'h-dd');
+  await runSearch(q, dd);
+}
+
+async function runSearch(q, dd) {
+  try {
+    const d = await dsearch(q);
+    const results = (d.results||[]).slice(0,8);
+    results.forEach(r => S.searchResultsCache.set(String(r.id), r));
+    renderDropdown(results, dd);
+  } catch { toast('Search failed'); }
+}
+
+function renderDropdown(results, dd) {
+  if (!results.length) { dd.innerHTML = `<div style="padding:14px;color:var(--text-muted);text-align:center;font-size:13px">No results</div>`; dd.style.display = 'block'; return; }
+  dd.innerHTML = results.map(r => {
+    const thumb = r.thumb ? `<img src="${esc(r.thumb)}" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:6px">` : `<div style="width:42px;height:42px;border-radius:6px;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:18px;color:#444">🎵</div>`;
+    return `<div class="sr-item" onclick="selectResult('${r.id}')">
+      <div class="sr-thumb">${thumb}</div>
+      <div class="sr-info"><div class="sr-title">${esc(r.title)}</div><div class="sr-meta">${r.year?r.year+' · ':''}${(r.label||[]).slice(0,1).join('')}</div></div>
+      <div class="sr-type">${r.type}</div>
+    </div>`;
+  }).join('');
+  dd.style.display = 'block';
+}
+
+function closeDropdowns() {
+  document.querySelectorAll('.srdd').forEach(d => d.style.display = 'none');
+}
+
+function quickSearch(q) {
+  const inp = document.getElementById('w-input');
+  if (inp) { inp.value = q; }
+  const dd = document.getElementById('w-dd');
+  runSearch(q, dd);
+}
+
+function selectResult(idStr) {
+  const r = S.searchResultsCache.get(String(idStr));
+  if (!r) return;
+  closeDropdowns();
+  document.getElementById('welcome').classList.add('gone');
+  if (!S.sim) initGraph();
+  clearGraph();
+
+  const nodeType = r.type === 'artist' ? 'artist' : r.type === 'label' ? 'label' : 'album';
+  const rootNode = { id: `${nodeType}-${r.id}`, discogsId: r.id, type: nodeType, rtype: r.type, name: r.title, thumb: r.thumb||'', isRoot: true, depth: 0 };
+  addNode(rootNode);
+  render();
+  expandNode(rootNode);
+  showPanel(rootNode);
+  document.getElementById('h-input').value = r.title;
+}
+
+// ═══════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════
+function clearGraph() {
+  S.nodes = []; S.links = []; S.expanded = new Set(); S.depth = 0;
+  document.getElementById('depth-num').textContent = '0';
+  if (S.sim) { S.sim.nodes([]); S.sim.force('link').links([]); S.sim.stop(); }
+  if (S.g) { S.g.selectAll('.g-nodes *,.g-links *,.g-llbls *').remove(); S.svg.select('defs').selectAll('clipPath').remove(); }
+}
+
+function resetAll() {
+  clearGraph(); closePanel(); closeRecs();
+  document.getElementById('welcome').classList.remove('gone');
+  document.getElementById('h-input').value = '';
+  S.liked = new Set();
+}
+
+function showLoad(txt) { document.getElementById('ld-txt').textContent = txt||'Loading…'; document.getElementById('loading').classList.add('on'); }
+function hideLoad() { document.getElementById('loading').classList.remove('on'); }
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closePanel(); closeRecs(); }
+  if (e.key === '/' && !e.target.matches('input')) { e.preventDefault(); document.getElementById('h-input').focus(); }
+});
+
+// Close recs when clicking overlay
+document.getElementById('recs-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('recs-modal')) closeRecs();
+});
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  initSearch();
+  initGraph(); // pre-warm graph
+});
+</script>
+</body>
+</html>
