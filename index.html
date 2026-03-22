@@ -448,7 +448,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 // CONFIG
 // ═══════════════════════════════════════════════════════════
 const CFG = {
-  GROQ_MODEL: 'llama3-8b-8192',
+  GROQ_MODEL: 'llama-3.1-8b-instant',
   MAX_ARTIST_RELEASES: 8,
   MUSIC_ROLES: ['produc','arrang','compos','written','conductor','mixed','engineer','mastered','bass','guitar','piano','drums','percussion','saxophone','trumpet','violin','cello','flute','organ','synth','keyboard','vocals','voice','strings','horns','brass','woodwind','vibraphone','trombone','harmonica','mandolin','harp','clarinet','accordion','turntabl','dj ','featuring','programming','sampler','mellophone'],
   COLORS: { album:'#ff6b1a', artist:'#f0f0f0', label:'#888', producer:'#ffb347', composer:'#b8a9c9', arranger:'#87ceeb', engineer:'#7eb8a4', def:'#aaa' }
@@ -1051,42 +1051,93 @@ async function getRecommendations(node, data) {
   const label = data?.labels?.[0]?.name || '';
   const credits = filterCredits(data?.extraartists||[]).slice(0,4).map(c=>`${clean(c.name)} (${c.role})`).join(', ');
 
+  // ── Try Groq first ──
+  const groqRecs = await getGroqRecs(title, artists, year, label, genres, credits);
+  if (groqRecs.length) return enrichWithDiscogs(groqRecs, node.discogsId);
+
+  // ── Discogs-only fallback ──
+  return getDiscogsRecs(node, data);
+}
+
+async function getGroqRecs(title, artists, year, label, genres, credits) {
   const prompt = `You are an expert record collector. A user loved "${title}" by ${artists}${year?' ('+year+')':''}.${label?' Label: '+label+'.':''} Genres: ${genres}.${credits?' Key credits: '+credits+'.':''}
 
-List exactly 5 album recommendations with strong musical similarities. Short, specific reason for each (same era, shared musicians, similar production style, related scene, etc.).
+List exactly 5 album recommendations. One specific sentence of reason per album (shared musicians, similar production, same scene, same era, etc.).
 
-Reply with ONLY a raw JSON array, no markdown, no explanation:
-[{"title":"Album Name","artist":"Artist Name","year":"1975","reason":"One specific sentence why it is similar."},...]`;
+Reply with ONLY a JSON array, absolutely no other text:
+[{"title":"Album Name","artist":"Artist Name","year":"1975","reason":"Specific reason."}]`;
 
   const txt = await groq(prompt, 1200);
   if (!txt) return [];
 
-  let recs = [];
+  // Robust bracket-depth extraction — handles ] inside string values
   try {
-    // Strip any markdown code fences or leading text
-    const clean_txt = txt.replace(/```json|```/gi, '').trim();
-    const match = clean_txt.match(/\[[\s\S]*?\]/);
-    if (match) recs = JSON.parse(match[0]);
+    const stripped = txt.replace(/```json|```/gi, '').trim();
+    const start = stripped.indexOf('[');
+    if (start === -1) return [];
+    let depth = 0, end = -1;
+    for (let i = start; i < stripped.length; i++) {
+      if (stripped[i] === '[') depth++;
+      else if (stripped[i] === ']') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) return [];
+    const parsed = JSON.parse(stripped.slice(start, end + 1));
+    return Array.isArray(parsed) ? parsed.filter(r => r.title && r.artist) : [];
   } catch(e) {
-    console.warn('JSON parse failed, raw txt:', txt);
-    // Fallback: try to parse the whole thing
-    try { recs = JSON.parse(txt.trim()); } catch {}
+    console.warn('Groq JSON parse failed:', e.message, '\nRaw:', txt.slice(0, 200));
+    return [];
   }
+}
 
-  if (!recs.length) return [];
-
-  // Fetch Discogs thumbnails sequentially (to respect rate limit)
+async function enrichWithDiscogs(recs, excludeId) {
   const enriched = [];
   for (const rec of recs) {
     try {
-      const q = `${rec.title} ${rec.artist}`;
-      const sr = await dsearch(q);
-      const hit = (sr.results||[]).find(r => r.type === 'release' || r.type === 'master');
-      enriched.push({ ...rec, thumb: hit?.thumb || '', discogsId: hit?.id, discogsType: hit?.type,
-        ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title+' '+rec.artist)}` });
-    } catch { enriched.push(rec); }
+      const sr = await dsearch(`${rec.title} ${rec.artist}`);
+      const hit = (sr.results||[]).find(r => (r.type==='release'||r.type==='master') && r.id !== excludeId);
+      enriched.push({ ...rec,
+        thumb: hit?.thumb || '',
+        discogsId: hit?.id,
+        discogsType: hit?.type,
+        ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title+' '+rec.artist)}`
+      });
+    } catch { enriched.push({ ...rec, ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(rec.title+' '+rec.artist)}` }); }
   }
   return enriched;
+}
+
+async function getDiscogsRecs(node, data) {
+  // Fallback: artist's other releases + same-label releases
+  const results = [];
+  const mainArtist = data?.artists?.[0];
+  const mainLabel  = data?.labels?.[0];
+
+  if (mainArtist?.id) {
+    try {
+      const d = await dartistRels(mainArtist.id);
+      for (const r of (d.releases||[]).filter(r => r.id !== node.discogsId).slice(0, 3)) {
+        results.push({ title: r.title, artist: clean(mainArtist.name), year: String(r.year||''),
+          reason: `Another ${clean(mainArtist.name)} release from the same period`,
+          thumb: r.thumb||'', discogsId: r.id, discogsType: r.type||'release',
+          ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(r.title+' '+mainArtist.name)}` });
+      }
+    } catch {}
+  }
+
+  if (mainLabel?.id && results.length < 5) {
+    try {
+      const d = await dlabelRels(mainLabel.id);
+      for (const r of (d.releases||[]).filter(r => r.id !== node.discogsId && !results.some(x=>x.discogsId===r.id)).slice(0, 5 - results.length)) {
+        const parts = (r.title||'').split(' - ');
+        results.push({ title: parts.slice(1).join(' - ') || r.title, artist: parts[0] || '', year: String(r.year||''),
+          reason: `Same label — ${mainLabel.name}`,
+          thumb: r.thumb||'', discogsId: r.id, discogsType: r.type||'release',
+          ytSearch: `https://www.youtube.com/results?search_query=${encodeURIComponent(r.title)}` });
+      }
+    } catch {}
+  }
+
+  return results;
 }
 
 function renderRecs(recs, container) {
