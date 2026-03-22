@@ -289,6 +289,51 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 .leg-item { display: flex; align-items: center; gap: 7px; color: var(--text-muted); }
 .leg-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
+/* ── SETTINGS MODAL ── */
+#cfg-modal {
+  position: fixed; inset: 0; z-index: 600; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.92); backdrop-filter: blur(10px);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+#cfg-modal.open { opacity: 1; pointer-events: all; }
+.cfg-box {
+  width: 92vw; max-width: 460px; background: var(--surface);
+  border: 1px solid var(--border-light); border-radius: 20px; padding: 28px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.9);
+  transform: translateY(16px); transition: transform .3s;
+}
+#cfg-modal.open .cfg-box { transform: translateY(0); }
+.cfg-logo { font-size: 22px; font-weight: 900; color: var(--accent); letter-spacing: -1px; margin-bottom: 4px; }
+.cfg-logo span { color: var(--text); }
+.cfg-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.6; }
+.cfg-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.cfg-input {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border-light);
+  border-radius: 10px; padding: 11px 14px; color: var(--text); font-size: 13px;
+  font-family: 'Inter',sans-serif; outline: none; transition: border-color .2s; margin-bottom: 16px;
+}
+.cfg-input:focus { border-color: var(--accent); }
+.cfg-input::placeholder { color: #444; }
+.cfg-hint { font-size: 11px; color: #444; margin-top: -12px; margin-bottom: 16px; }
+.cfg-hint a { color: var(--accent); text-decoration: none; }
+.cfg-save {
+  width: 100%; background: var(--accent); border: none; border-radius: 12px;
+  padding: 13px; color: #fff; font-size: 14px; font-weight: 700;
+  font-family: 'Inter',sans-serif; cursor: pointer; transition: background .2s; margin-top: 4px;
+}
+.cfg-save:hover { background: var(--accent-dim); }
+.cfg-skip { display: block; text-align: center; margin-top: 12px; font-size: 12px; color: #444; cursor: pointer; transition: color .2s; }
+.cfg-skip:hover { color: var(--text-muted); }
+
+/* Gear button */
+.gear-btn {
+  width: 32px; height: 32px; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-muted); font-size: 14px; flex-shrink: 0;
+  transition: border-color .2s, color .2s;
+}
+.gear-btn:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--surface); }
@@ -339,6 +384,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
     <div class="srdd" id="h-dd"></div>
   </div>
   <div class="depth-badge">depth <strong id="depth-num">0</strong></div>
+  <div class="gear-btn" onclick="openCfg()" title="API Keys">⚙</div>
 </div>
 
 <!-- Graph -->
@@ -374,6 +420,22 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
   <div class="leg-item"><div class="leg-dot" style="background:#87ceeb"></div>Arranger</div>
   <div class="leg-item"><div class="leg-dot" style="background:#7eb8a4"></div>Engineer / Mixer</div>
   <div class="leg-item"><div class="leg-dot" style="background:#888"></div>Label</div>
+</div>
+
+<!-- Config Modal -->
+<div id="cfg-modal">
+  <div class="cfg-box">
+    <div class="cfg-logo">collector's <span>rabbit hole</span></div>
+    <p class="cfg-desc">Per iniziare inserisci le tue API keys. Vengono salvate solo nel tuo browser (localStorage) e non inviate da nessuna parte.</p>
+    <div class="cfg-label">Discogs Token</div>
+    <input class="cfg-input" id="cfg-disc" type="text" placeholder="fvYYQHvh…" autocomplete="off" spellcheck="false">
+    <div class="cfg-hint">Ottienilo su <a href="https://www.discogs.com/settings/developers" target="_blank">discogs.com/settings/developers</a></div>
+    <div class="cfg-label">Groq API Key</div>
+    <input class="cfg-input" id="cfg-groq" type="text" placeholder="gsk_…" autocomplete="off" spellcheck="false">
+    <div class="cfg-hint">Ottienila su <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a></div>
+    <button class="cfg-save" onclick="saveCfg()">Salva e inizia →</button>
+    <span class="cfg-skip" onclick="skipCfg()">Salta (l'AI commentary non funzionerà senza Groq)</span>
+  </div>
 </div>
 
 <!-- Tooltip -->
@@ -424,8 +486,16 @@ async function drainQ() {
 }
 async function dget(path) {
   return enqueue(async () => {
-    const url = `/api/discogs?path=${encodeURIComponent(path)}`;
-    const r = await fetch(url);
+    const token = localStorage.getItem('DISC_TOKEN');
+    let url, opts = {};
+    if (token) {
+      const sep = path.includes('?') ? '&' : '?';
+      url = `https://api.discogs.com${path}${sep}token=${token}`;
+      opts = { headers: { 'User-Agent': 'CollectorsRabbitHole/1.0' } };
+    } else {
+      url = `/api/discogs?path=${encodeURIComponent(path)}`;
+    }
+    const r = await fetch(url, opts);
     if (r.status === 429) { await sleep(2500); return dget(path); }
     if (!r.ok) throw new Error(`Discogs ${r.status}`);
     return r.json();
@@ -442,11 +512,17 @@ const dlabelRels = id => dget(`/labels/${id}/releases?per_page=12&sort=year&sort
 async function groq(prompt, maxTok = 130) {
   if (S.groqCache.has(prompt)) return S.groqCache.get(prompt);
   try {
-    const r = await fetch('/api/groq', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: CFG.GROQ_MODEL, messages: [{ role: 'user', content: prompt }], max_tokens: maxTok, temperature: 0.75 })
-    });
+    const key = localStorage.getItem('GROQ_KEY');
+    const body = JSON.stringify({ model: CFG.GROQ_MODEL, messages: [{ role: 'user', content: prompt }], max_tokens: maxTok, temperature: 0.75 });
+    let url, headers;
+    if (key) {
+      url = 'https://api.groq.com/openai/v1/chat/completions';
+      headers = { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
+    } else {
+      url = '/api/groq';
+      headers = { 'Content-Type': 'application/json' };
+    }
+    const r = await fetch(url, { method: 'POST', headers, body });
     if (!r.ok) return null;
     const d = await r.json();
     const txt = d.choices[0].message.content;
@@ -1149,11 +1225,42 @@ document.getElementById('recs-modal').addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════════════════
+// CONFIG MODAL
+// ═══════════════════════════════════════════════════════════
+function checkConfig() {
+  const hasDisc = !!localStorage.getItem('DISC_TOKEN');
+  const hasGroq = !!localStorage.getItem('GROQ_KEY');
+  if (!hasDisc) openCfg();
+}
+function openCfg() {
+  const m = document.getElementById('cfg-modal');
+  document.getElementById('cfg-disc').value = localStorage.getItem('DISC_TOKEN') || '';
+  document.getElementById('cfg-groq').value = localStorage.getItem('GROQ_KEY') || '';
+  m.classList.add('open');
+}
+function saveCfg() {
+  const disc = document.getElementById('cfg-disc').value.trim();
+  const groq = document.getElementById('cfg-groq').value.trim();
+  if (!disc) { document.getElementById('cfg-disc').focus(); return; }
+  if (disc) localStorage.setItem('DISC_TOKEN', disc);
+  if (groq) localStorage.setItem('GROQ_KEY', groq);
+  document.getElementById('cfg-modal').classList.remove('open');
+  toast('API keys salvate ✓');
+}
+function skipCfg() {
+  document.getElementById('cfg-modal').classList.remove('open');
+}
+document.getElementById('cfg-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('cfg-modal')) skipCfg();
+});
+
+// ═══════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   initSearch();
-  initGraph(); // pre-warm graph
+  initGraph();
+  checkConfig();
 });
 </script>
 </body>
